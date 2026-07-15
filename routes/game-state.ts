@@ -42,6 +42,7 @@ export async function GET(request: Request): Promise<Response> {
     status: game.status,
     turn: game.turn,
     createdAt: game.createdAt,
+    conversationId: game.conversationId,
     yourBoard: {
       grid: selfView.grid,
       shipGrid: selfView.shipGrid,

@@ -101,7 +101,7 @@ export async function POST(request: Request): Promise<Response> {
 
   // Trigger the assistant's turn automatically
   if (game.turn === "assistant" && game.status === "playing") {
-    triggerAssistantTurn(gameId).catch(() => {
+    triggerAssistantTurn(game).catch(() => {
       // Non-fatal — the player can prompt the assistant manually
     });
   }
@@ -117,6 +117,7 @@ function projectPlayerView(game: GameState) {
     status: game.status,
     turn: game.turn,
     createdAt: game.createdAt,
+    conversationId: game.conversationId,
     yourBoard: {
       grid: selfView.grid,
       shipGrid: selfView.shipGrid,
@@ -145,25 +146,31 @@ function formatShotMessage(result: string, sunkShip?: string): string {
   }
 }
 
-async function triggerAssistantTurn(gameId: string): Promise<void> {
+async function triggerAssistantTurn(game: GameState): Promise<void> {
   // Derive the plugin root from this module's URL so the assistant
   // gets an exact `bun` command instead of having to discover it.
   const moduleUrl = new URL(import.meta.url);
   const pluginRoot = moduleUrl.pathname
     .replace(/\/routes\/games\/fire\.ts$/, "");
 
-  await runConversationTurn({
-    content: [
-      {
-        type: "text",
-        text: [
-          `It's your turn in Battleship (game ${gameId}).`,
-          ``,
-          `1. Check the board: bun ${pluginRoot}/skills/battleship/scripts/battleship.ts status --game ${gameId}`,
-          `2. Pick a coordinate using your checkerboard strategy.`,
-          `3. Fire: bun ${pluginRoot}/skills/battleship/scripts/battleship.ts fire <coordinate> --game ${gameId}`,
-        ].join("\n"),
-      },
-    ],
+  const promptText = [
+    `It's your turn in Battleship (game ${game.gameId}).`,
+    ``,
+    `1. Check the board: bun ${pluginRoot}/skills/battleship/scripts/battleship.ts status --game ${game.gameId}`,
+    `2. Pick a coordinate using your checkerboard strategy.`,
+    `3. Fire: bun ${pluginRoot}/skills/battleship/scripts/battleship.ts fire <coordinate> --game ${game.gameId}`,
+  ].join("\n");
+
+  const result = await runConversationTurn({
+    ...(game.conversationId
+      ? { conversationId: game.conversationId }
+      : {}),
+    content: [{ type: "text", text: promptText }],
   });
+
+  // Persist the conversation ID so future turns reuse the same conversation
+  if (!game.conversationId && result.conversationId) {
+    game.conversationId = result.conversationId;
+    saveGame(game);
+  }
 }
