@@ -281,15 +281,18 @@ export function playerViewOfAssistant(game: GameState): {
 
 /**
  * What the player sees of their own board: everything, including ships
- * and where the assistant has fired.
+ * and where the assistant has fired. The `shipGrid` parallel grid carries
+ * the ship index (0-4) for each cell so the UI can color each ship.
  */
 export function playerViewOfSelf(game: GameState): {
   grid: Grid;
+  shipGrid: number[][];
   shots: Array<{ row: number; col: number; result: string }>;
   remainingShips: number;
 } {
   return {
     grid: game.playerBoard.grid,
+    shipGrid: buildShipGrid(game.playerBoard),
     shots: game.assistantShots,
     remainingShips: countRemainingShips(game.playerBoard),
   };
@@ -316,6 +319,25 @@ export function assistantViewOfPlayer(game: GameState): {
 
 function countRemainingShips(board: Board): number {
   return board.ships.filter((s) => !s.hits.every((h) => h)).length;
+}
+
+/**
+ * Build a parallel grid where each cell contains the ship index (0-4) or -1.
+ * Used by the UI to color each ship individually.
+ */
+function buildShipGrid(board: Board): number[][] {
+  const shipGrid: number[][] = Array.from({ length: BOARD_SIZE }, () =>
+    Array(BOARD_SIZE).fill(-1),
+  );
+  for (let i = 0; i < board.ships.length; i++) {
+    const ship = board.ships[i];
+    for (let j = 0; j < ship.size; j++) {
+      const r = ship.horizontal ? ship.row : ship.row + j;
+      const c = ship.horizontal ? ship.col + j : ship.col;
+      shipGrid[r][c] = i;
+    }
+  }
+  return shipGrid;
 }
 
 // ─── Coordinate helpers ──────────────────────────────────────────────────────

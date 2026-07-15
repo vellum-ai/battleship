@@ -119,6 +119,7 @@ function projectPlayerView(game: GameState) {
     createdAt: game.createdAt,
     yourBoard: {
       grid: selfView.grid,
+      shipGrid: selfView.shipGrid,
       remainingShips: selfView.remainingShips,
       enemyShots: selfView.shots,
     },
@@ -145,11 +146,23 @@ function formatShotMessage(result: string, sunkShip?: string): string {
 }
 
 async function triggerAssistantTurn(gameId: string): Promise<void> {
+  // Derive the plugin root from this module's URL so the assistant
+  // gets an exact `bun` command instead of having to discover it.
+  const moduleUrl = new URL(import.meta.url);
+  const pluginRoot = moduleUrl.pathname
+    .replace(/\/routes\/games\/fire\.ts$/, "");
+
   await runConversationTurn({
     content: [
       {
         type: "text",
-        text: `It's your turn in Battleship (game ${gameId}). Check the game state and fire your shot. The Battleship skill has your instructions.`,
+        text: [
+          `It's your turn in Battleship (game ${gameId}).`,
+          ``,
+          `1. Check the board: bun ${pluginRoot}/skills/battleship/scripts/battleship.ts status --game ${gameId}`,
+          `2. Pick a coordinate using your checkerboard strategy.`,
+          `3. Fire: bun ${pluginRoot}/skills/battleship/scripts/battleship.ts fire <coordinate> --game ${gameId}`,
+        ].join("\n"),
       },
     ],
   });

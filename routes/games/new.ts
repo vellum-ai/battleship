@@ -37,6 +37,7 @@ function projectPlayerView(game: GameState) {
     createdAt: game.createdAt,
     yourBoard: {
       grid: selfView.grid,
+      shipGrid: selfView.shipGrid,
       remainingShips: selfView.remainingShips,
       enemyShots: selfView.shots,
     },

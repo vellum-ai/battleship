@@ -6,6 +6,7 @@ export interface Shot {
 
 export interface BoardView {
   grid: string[][];
+  shipGrid?: number[][];
   remainingShips: number;
   shots: Shot[];
 }
