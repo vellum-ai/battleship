@@ -44,6 +44,7 @@ export async function GET(request: Request): Promise<Response> {
     createdAt: game.createdAt,
     yourBoard: {
       grid: selfView.grid,
+      shipGrid: selfView.shipGrid,
       remainingShips: selfView.remainingShips,
       enemyShots: selfView.shots,
     },

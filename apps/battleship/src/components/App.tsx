@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "preact/hooks";
-import { GameBoard } from "./GameBoard";
+import { GameBoard, getShipColor } from "./GameBoard";
 import { GameList } from "./GameList";
 import type { GameState, GameSummary } from "./types";
 
@@ -219,6 +219,7 @@ export function App() {
           title="Your Fleet"
           titleClass="fleet"
           grid={game.yourBoard.grid}
+          shipGrid={game.yourBoard.shipGrid}
           shots={game.yourBoard.enemyShots}
           isTarget={false}
           canFire={false}
@@ -228,8 +229,14 @@ export function App() {
 
       {game.yourShips && (
         <div class="ship-list">
-          {game.yourShips.map((ship: any) => (
-            <span class={`ship-tag${ship.sunk ? " sunk" : ""}`}>
+          {game.yourShips.map((ship: any, i: number) => (
+            <span
+              class={`ship-tag${ship.sunk ? " sunk" : ""}`}
+              style={`border-color:${getShipColor(i)};color:${getShipColor(i)}`}
+            >
+              <span
+                style={`display:inline-block;width:10px;height:10px;border-radius:2px;background:${getShipColor(i)};margin-right:4px;vertical-align:middle`}
+              ></span>
               {ship.name} ({ship.size})
             </span>
           ))}
