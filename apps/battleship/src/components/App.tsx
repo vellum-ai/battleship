@@ -169,13 +169,13 @@ export function App() {
   };
 
   const viewConversation = (conversationId: string) => {
-    const vellum = (window as any).vellum;
-    if (vellum?.sendAction) {
-      vellum.sendAction("relay_prompt", {
-        prompt: "Show me the Battleship game status.",
-        conversationId,
-      });
-    }
+    vfetch(`${BASE}/open-conversation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId }),
+    }).catch(() => {
+      addMessage("Failed to open conversation", "miss");
+    });
   };
 
   if (view === "list") {
