@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-width=1.0" />
+<title>Battleship</title>
+<style>
+  :root {
+    --ocean: #0a1628;
+    --ocean-light: #142840;
+    --grid-line: #1e3a5f;
+    --cell: #1a3050;
+    --cell-hover: #2a4060;
+    --hit: #e63946;
+    --miss: #457b9d;
+    --ship: #6c757d;
+    --ship-sunk: #9d0208;
+    --text: #e0e1dd;
+    --text-dim: #8d99ae;
+    --accent: #00b4d8;
+    --accent-dim: #0077b6;
+    --bg: #0d1b2a;
+    --card: #142840;
+    --border: #1e3a5f;
+    --success: #06d6a0;
+    --warn: #ffd166;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; letter-spacing: 0.5px; }
+  .subtitle { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 16px; }
+  .status-bar {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 20px; margin-bottom: 20px; min-width: 600px;
+  }
+  .status-item { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+  .status-item .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot.player { background: var(--accent); }
+  .dot.assistant { background: var(--warn); }
+  .dot.over { background: var(--hit); }
+  .ships-remaining { color: var(--text-dim); font-size: 0.8rem; }
+  .ships-remaining strong { color: var(--text); }
+  .boards { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+  .board-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .board-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; text-align: center; }
+  .board-title.target { color: var(--accent); }
+  .board-title.fleet { color: var(--success); }
+  .grid-wrapper {
+    display: inline-grid; grid-template-columns: 24px repeat(10, 32px);
+    grid-template-rows: 24px repeat(10, 32px); gap: 1px;
+    background: var(--grid-line); border: 2px solid var(--grid-line); border-radius: 4px;
+  }
+  .grid-wrapper .corner { background: var(--ocean); }
+  .grid-wrapper .label {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; color: var(--text-dim); background: var(--ocean-light);
+  }
+  .cell { background: var(--cell); display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; cursor: default; transition: background 0.15s; user-select: none; }
+  .cell.target-cell { cursor: pointer; }
+  .cell.target-cell:hover { background: var(--cell-hover); }
+  .cell.target-cell.disabled { cursor: not-allowed; opacity: 0.5; }
+  .cell.hit { background: var(--hit); }
+  .cell.miss { background: var(--miss); }
+  .cell.miss::after { content: "\2022"; color: #5a8aac; font-size: 1.1rem; }
+  .cell.ship { background: var(--ship); }
+  .cell.ship.hit { background: var(--ship-sunk); }
+  .cell.sunk { background: var(--ship-sunk); }
+  .controls { margin-top: 20px; display: flex; gap: 12px; justify-content: center; }
+  .btn {
+    padding: 8px 20px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--card); color: var(--text); font-size: 0.85rem; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: var(--ocean-light); border-color: var(--accent-dim); }
+  .btn.primary { background: var(--accent-dim); border-color: var(--accent-dim); color: white; }
+  .btn.primary:hover { background: var(--accent); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .message-log { margin-top: 20px; max-width: 600px; width: 100%; }
+  .message {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 14px; margin-bottom: 6px; font-size: 0.82rem; animation: fadeIn 0.3s ease;
+  }
+  .message.hit { border-left: 3px solid var(--hit); }
+  .message.miss { border-left: 3px solid var(--miss); }
+  .message.sunk { border-left: 3px solid var(--ship-sunk); }
+  .message.info { border-left: 3px solid var(--accent); }
+  .message.win { border-left: 3px solid var(--success); }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  .ship-list { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .ship-tag { font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; background: var(--ocean-light); border: 1px solid var(--border); }
+  .ship-tag.sunk { background: var(--ship-sunk); border-color: var(--ship-sunk); text-decoration: line-through; opacity: 0.7; }
+  .loading { text-align: center; padding: 40px; color: var(--text-dim); }
+</style>
+</head>
+<body>
+<h1>&#9875; Battleship</h1>
+<div class="subtitle">You vs. Your Assistant</div>
+<div id="status-bar" class="status-bar" style="display:none;">
+  <div class="status-item" id="turn-indicator"></div>
+  <div class="ships-remaining" id="ship-count"></div>
+</div>
+<div id="boards" class="boards"></div>
+<div class="controls">
+  <button class="btn primary" id="new-game-btn" onclick="newGame()">New Game</button>
+  <button class="btn" id="refresh-btn" onclick="refresh()">Refresh</button>
+</div>
+<div id="messages" class="message-log"></div>
+<script>
+  const BASE = "/v1/x/plugins/battleship";
+  function vfetch(url, options) {
+    const fetcher = (window.vellum && window.vellum.fetch) ? window.vellum.fetch : fetch;
+    return fetcher(url, options);
+  }
+  let gameState = null;
+  let isFiring = false;
+
+  function addMessage(text, type) {
+    const el = document.getElementById("messages");
+    const msg = document.createElement("div");
+    msg.className = "message " + (type || "info");
+    msg.textContent = text;
+    el.prepend(msg);
+    while (el.children.length > 10) el.removeChild(el.lastChild);
+  }
+
+  async function newGame() {
+    try {
+      const res = await vfetch(BASE + "/game?action=new", { method: "POST" });
+      const data = await res.json();
+      gameState = data;
+      render(data);
+      addMessage(data.message || "New game started!", "info");
+    } catch (err) { addMessage("Failed to start new game: " + err.message, "miss"); }
+  }
+
+  async function refresh() {
+    try {
+      const res = await vfetch(BASE + "/game", { method: "GET" });
+      const data = await res.json();
+      if (data.status === "no_game") {
+        addMessage("No active game. Click New Game to start.", "info");
+        document.getElementById("status-bar").style.display = "none";
+        document.getElementById("boards").innerHTML = '<div class="loading">No game in progress. Click New Game to start.</div>';
+        return;
+      }
+      gameState = data;
+      render(data);
+    } catch (err) { addMessage("Failed to load game: " + err.message, "miss"); }
+  }
+
+  async function fireShot(row, col) {
+    if (isFiring) return;
+    if (gameState && gameState.turn !== "player") return;
+    if (gameState && gameState.status !== "playing") return;
+    isFiring = true;
+    try {
+      const coord = String.fromCharCode(65 + row) + (col + 1);
+      const res = await vfetch(BASE + "/game", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coordinate: coord }),
+      });
+      const data = await res.json();
+      if (data.error) { addMessage(data.error.message, "miss"); return; }
+      gameState = data;
+      render(data);
+      const shot = data.lastShot;
+      if (shot) {
+        addMessage(
+          shot.result === "sunk" ? "You sank the enemy's " + shot.sunkShip + "!"
+          : shot.result === "hit" ? "Hit at " + shot.coordinate + "!"
+          : "Miss at " + shot.coordinate, shot.result
+        );
+        if (data.status === "player_won") { addMessage("Victory! You sank all enemy ships!", "win"); }
+        else if (data.turn === "assistant") { addMessage("Assistant is taking its turn...", "info"); setTimeout(pollAssistantTurn, 3000); }
+      }
+    } catch (err) { addMessage("Fire failed: " + err.message, "miss"); }
+    finally { isFiring = false; }
+  }
+
+  async function pollAssistantTurn() {
+    let attempts = 0;
+    const maxAttempts = 30;
+    const poll = async () => {
+      if (attempts >= maxAttempts) { addMessage("Still waiting for the assistant's move. Click Refresh to check manually.", "info"); return; }
+      attempts++;
+      try {
+        const res = await vfetch(BASE + "/game", { method: "GET" });
+        const data = await res.json();
+        if (data.status === "no_game") return;
+        if (data.turn === "player" || data.status !== "playing") {
+          gameState = data; render(data);
+          const enemyShots = data.yourBoard.enemyShots;
+          if (enemyShots && enemyShots.length > 0) {
+            const latest = enemyShots[enemyShots.length - 1];
+            const coord = String.fromCharCode(65 + latest.row) + (latest.col + 1);
+            addMessage("Assistant fired at " + coord + " - " + latest.result + (latest.result === "sunk" ? " your ship!" : ""),
+              latest.result === "hit" || latest.result === "sunk" ? "hit" : "miss");
+          }
+          if (data.status === "assistant_won") { addMessage("The assistant sank your fleet! Better luck next time.", "win"); }
+        } else { setTimeout(poll, 3000); }
+      } catch (err) { setTimeout(poll, 3000); }
+    };
+    setTimeout(poll, 3000);
+  }
+
+  function render(data) {
+    const bar = document.getElementById("status-bar");
+    bar.style.display = "flex";
+    const turnEl = document.getElementById("turn-indicator");
+    if (data.status === "player_won") { turnEl.innerHTML = '<span class="dot over"></span> You Won!'; }
+    else if (data.status === "assistant_won") { turnEl.innerHTML = '<span class="dot over"></span> Assistant Won!'; }
+    else if (data.turn === "player") { turnEl.innerHTML = '<span class="dot player"></span> Your Turn'; }
+    else { turnEl.innerHTML = '<span class="dot assistant"></span> Assistant Thinking...'; }
+    document.getElementById("ship-count").innerHTML =
+      "Your ships: <strong>" + data.yourBoard.remainingShips + "/5</strong> | Enemy ships: <strong>" + data.enemyWaters.remainingShips + "/5</strong>";
+    const boardsEl = document.getElementById("boards");
+    boardsEl.innerHTML = "";
+    boardsEl.appendChild(buildBoard("Enemy Waters", "target", data.enemyWaters.grid, data.enemyWaters.yourShots, true));
+    boardsEl.appendChild(buildBoard("Your Fleet", "fleet", data.yourBoard.grid, data.yourBoard.enemyShots, false));
+    if (data.yourShips) {
+      const shipList = document.createElement("div");
+      shipList.className = "ship-list";
+      for (const ship of data.yourShips) {
+        const tag = document.createElement("span");
+        tag.className = "ship-tag" + (ship.sunk ? " sunk" : "");
+        tag.textContent = ship.name + " (" + ship.size + ")";
+        shipList.appendChild(tag);
+      }
+      boardsEl.appendChild(shipList);
+    }
+  }
+
+  function buildBoard(title, titleClass, grid, shots, isTarget) {
+    const section = document.createElement("div");
+    section.className = "board-section";
+    const t = document.createElement("div");
+    t.className = "board-title " + titleClass;
+    t.textContent = title;
+    section.appendChild(t);
+    const wrapper = document.createElement("div");
+    wrapper.className = "grid-wrapper";
+    const corner = document.createElement("div");
+    corner.className = "corner";
+    wrapper.appendChild(corner);
+    for (let c = 0; c < 10; c++) {
+      const label = document.createElement("div");
+      label.className = "label";
+      label.textContent = c + 1;
+      wrapper.appendChild(label);
+    }
+    for (let r = 0; r < 10; r++) {
+      const rowLabel = document.createElement("div");
+      rowLabel.className = "label";
+      rowLabel.textContent = String.fromCharCode(65 + r);
+      wrapper.appendChild(rowLabel);
+      for (let c = 0; c < 10; c++) {
+        const cell = document.createElement("div");
+        const state = grid[r][c];
+        cell.className = "cell";
+        if (isTarget) {
+          cell.classList.add("target-cell");
+          if (state === "hit") cell.classList.add("hit");
+          if (state === "miss") cell.classList.add("miss");
+          if (state === "hit" || state === "miss") { cell.classList.add("disabled"); }
+          else if (gameState && (gameState.turn !== "player" || gameState.status !== "playing")) { cell.classList.add("disabled"); }
+          else { cell.onclick = (function(rr, cc) { return function() { fireShot(rr, cc); }; })(r, c); }
+        } else {
+          if (state === "ship") cell.classList.add("ship");
+          if (state === "hit") cell.classList.add("hit");
+          if (state === "miss") cell.classList.add("miss");
+          if (state === "ship") {
+            for (const shot of (shots || [])) {
+              if (shot.row === r && shot.col === c) { cell.classList.add("hit"); cell.classList.remove("ship"); break; }
+            }
+          }
+        }
+        wrapper.appendChild(cell);
+      }
+    }
+    section.appendChild(wrapper);
+    return section;
+  }
+  refresh();
+</script>
+</body>
+</html>
