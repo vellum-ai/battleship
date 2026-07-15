@@ -35,6 +35,7 @@ function projectPlayerView(game: GameState) {
     status: game.status,
     turn: game.turn,
     createdAt: game.createdAt,
+    conversationId: game.conversationId,
     yourBoard: {
       grid: selfView.grid,
       shipGrid: selfView.shipGrid,

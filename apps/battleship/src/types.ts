@@ -22,6 +22,7 @@ export interface GameState {
   status: "playing" | "player_won" | "assistant_won";
   turn: "player" | "assistant";
   createdAt: string;
+  conversationId?: string;
   yourBoard: BoardView;
   enemyWaters: BoardView;
   yourShips: ShipInfo[];

@@ -63,6 +63,8 @@ export interface GameState {
   status: "playing" | "player_won" | "assistant_won";
   /** When the game was created (ISO timestamp). */
   createdAt: string;
+  /** Conversation ID for assistant turns (set on first fire, reused after). */
+  conversationId?: string;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────

@@ -168,6 +168,16 @@ export function App() {
     loadGames();
   };
 
+  const viewConversation = (conversationId: string) => {
+    const vellum = (window as any).vellum;
+    if (vellum?.sendAction) {
+      vellum.sendAction("relay_prompt", {
+        prompt: "Show me the Battleship game status.",
+        conversationId,
+      });
+    }
+  };
+
   if (view === "list") {
     return (
       <GameList
@@ -203,6 +213,14 @@ export function App() {
         <div class="ships-remaining">
           Your ships: <strong>{game.yourBoard.remainingShips}/5</strong> | Enemy ships: <strong>{game.enemyWaters.remainingShips}/5</strong>
         </div>
+        {game.turn === "assistant" && game.status === "playing" && game.conversationId && (
+          <button
+            class="btn btn-sm"
+            onClick={() => viewConversation(game.conversationId!)}
+          >
+            View Conversation
+          </button>
+        )}
       </div>
 
       <div class="boards">
