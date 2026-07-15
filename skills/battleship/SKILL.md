@@ -28,6 +28,11 @@ game API for the app UI only), and this skill (your script for taking your turn)
 - First to sink all 5 enemy ships wins
 - Coordinates: A1 (top-left) through J10 (bottom-right), letter = row, number = column
 
+## Multi-Game Support
+
+Multiple games can exist simultaneously. The script defaults to the most
+recent active game, but you can target a specific game with `--game <id>`.
+
 ## Your Script
 
 You interact with the game through a script at `skills/battleship/scripts/battleship.ts`.
@@ -40,7 +45,14 @@ bun skills/battleship/scripts/battleship.ts status
 ```
 
 Returns whose turn it is, your targeting grid (H=hit, M=miss, .=unknown),
-how many enemy ships remain, and all your past shots.
+how many enemy ships remain, and all your past shots. Uses the most recent
+active game.
+
+To check a specific game:
+
+```bash
+bun skills/battleship/scripts/battleship.ts status --game <gameId>
+```
 
 ### Fire a shot
 
@@ -50,6 +62,12 @@ bun skills/battleship/scripts/battleship.ts fire A5
 
 Fires at the given coordinate. Returns the result (hit, miss, sunk), your
 updated targeting grid, remaining enemy ships, and whose turn is next.
+
+To fire in a specific game:
+
+```bash
+bun skills/battleship/scripts/battleship.ts fire A5 --game <gameId>
+```
 
 ## Strategy
 

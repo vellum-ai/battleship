@@ -4,13 +4,15 @@ A Vellum plugin that lets you play Battleship against your assistant.
 
 This plugin demonstrates three plugin surfaces working together:
 
-- **Apps** — The `apps/battleship/` directory ships a single-file HTML game
-  board. The assistant discovers it natively as a plugin-bundled app (id:
-  `plugins~battleship~battleship`) and serves it in the workspace panel.
+- **Apps** — The `apps/battleship/` directory ships a multi-file TSX game
+  board (Preact + esbuild). The assistant discovers it natively as a
+  plugin-bundled app (id: `plugins~battleship~battleship`) and serves the
+  compiled output in the workspace panel.
 - **Routes** — File-based HTTP endpoints (`routes/`) serve the game API for
-  the app UI. The guardian fires shots and checks game state through these.
-  After the player fires, the game route triggers the assistant's turn
-  automatically via `runConversationTurn` from the plugin API.
+  the app UI. The player starts games, lists games, resumes games, fetches
+  game state, and fires shots through these routes. After the player fires,
+  the game route triggers the assistant's turn automatically via
+  `runConversationTurn` from the plugin API.
 - **Skills** — The `skills/battleship/SKILL.md` instructs the assistant on
   how to play. A script at `skills/battleship/scripts/battleship.ts` provides
   `fire` and `status` subcommands that import the shared game logic directly.
@@ -19,8 +21,9 @@ This plugin demonstrates three plugin surfaces working together:
 
 Routes and skill scripts serve different actors:
 
-- **Routes** (`routes/`) are for the **guardian** (the app UI). The player
-  fires shots and reads game state through HTTP endpoints.
+- **Routes** (`routes/`) are for the **user** (the app UI). The player
+  starts games, lists games, fires shots, and reads game state through HTTP
+  endpoints.
 - **Skill scripts** (`skills/battleship/scripts/`) are for the **assistant**.
   They import `src/game-logic.ts` directly and execute in-process.
 
@@ -28,26 +31,14 @@ Both share the same game logic module (`src/game-logic.ts`) and the same
 file-based state store (`src/state-store.ts`), so the game stays consistent
 regardless of which actor makes a move.
 
-```
-Player (app UI)                     Assistant (conversation)
-     |                                    |
-     | POST /game?action=new              |
-     |--------> routes/game.ts            |
-     |<-------- new game state            |
-     |                                    |
-     | POST /game { coordinate: "A5" }    |
-     |--------> routes/game.ts            |
-     |<-------- hit/miss/sunk result      |
-     |        turn passes to assistant    |
-     |        runConversationTurn()       |
-     |                                    |
-     |                    battleship.ts status (reads game state)
-     |                    battleship.ts fire A5 (imports game-logic.ts)
-     |                    turn passes back to player
-     |                                    |
-     | GET /game (polling)                |
-     |<-------- updated state             |
-```
+## Routes
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/games` | List all games (active and completed) |
+| POST | `/games/new` | Start a new game (random ship placement) |
+| POST | `/games/fire` | Submit the player's turn (fire at assistant's fleet) |
+| GET | `/game-state?gameId=<id>` | Fetch a specific game's state |
 
 ## Hidden Information
 
@@ -78,13 +69,25 @@ battleship/
       scripts/
         battleship.ts       # fire <coordinate> and status subcommands
   routes/
-    game.ts                 # Guardian-facing game API (GET state, POST fire/new)
+    games.ts                # GET — list all games
+    games/
+      new.ts                # POST — start a new game
+      fire.ts               # POST — submit player's turn
+    game-state.ts           # GET — fetch single game state
   src/
     game-logic.ts           # Core game logic (shared by routes + skill scripts)
-    state-store.ts          # File-based game state persistence
+    state-store.ts          # File-based multi-game state persistence
   apps/
     battleship/
-      index.html            # Game board UI (served as a plugin-bundled app)
+      src/
+        index.html          # HTML shell
+        main.tsx            # Preact entry point
+        styles.css          # Game styles
+        types.ts            # Shared TypeScript types
+        components/
+          App.tsx           # Main app component (game list + board views)
+          GameBoard.tsx     # 10x10 grid component (target or fleet view)
+          GameList.tsx      # Game list with active/completed sections
 ```
 
 ## Installation
@@ -109,3 +112,5 @@ app_open(app_id="plugins~battleship~battleship")
    the battleship script to read the board, pick a coordinate
    strategically, and fire back
 5. First to sink all 5 enemy ships wins!
+6. Multiple games can be active simultaneously — use the game list to
+   switch between them
