@@ -7,15 +7,26 @@ This plugin demonstrates three plugin surfaces working together:
 - **Apps** — The `apps/battleship/` directory ships a single-file HTML game
   board. The assistant discovers it natively as a plugin-bundled app (id:
   `plugins~battleship~battleship`) and serves it in the workspace panel.
-- **Routes** — File-based HTTP endpoints (`routes/`) serve the game API.
-  The app UI calls these to fire shots and check game state. After the
-  player fires, the game route triggers the assistant's turn automatically
-  via `runConversationTurn` from the plugin API.
+- **Routes** — File-based HTTP endpoints (`routes/`) serve the game API for
+  the app UI. The guardian fires shots and checks game state through these.
+  After the player fires, the game route triggers the assistant's turn
+  automatically via `runConversationTurn` from the plugin API.
 - **Skills** — The `skills/battleship/SKILL.md` instructs the assistant on
-  how to play: which routes to call, how to read the targeting grid, and
-  strategy for picking shots. The assistant uses `curl` via bash to fire.
+  how to play. A script at `skills/battleship/scripts/battleship.ts` provides
+  `fire` and `status` subcommands that import the shared game logic directly.
 
-## How It Works
+## Architecture: Routes vs Skill Scripts
+
+Routes and skill scripts serve different actors:
+
+- **Routes** (`routes/`) are for the **guardian** (the app UI). The player
+  fires shots and reads game state through HTTP endpoints.
+- **Skill scripts** (`skills/battleship/scripts/`) are for the **assistant**.
+  They import `src/game-logic.ts` directly and execute in-process.
+
+Both share the same game logic module (`src/game-logic.ts`) and the same
+file-based state store (`src/state-store.ts`), so the game stays consistent
+regardless of which actor makes a move.
 
 ```
 Player (app UI)                     Assistant (conversation)
@@ -30,8 +41,8 @@ Player (app UI)                     Assistant (conversation)
      |        turn passes to assistant    |
      |        runConversationTurn()       |
      |                                    |
-     |                    skill activates, assistant reads SKILL.md
-     |                    curl POST /assistant-fire { coordinate }
+     |                    battleship.ts status (reads game state)
+     |                    battleship.ts fire A5 (imports game-logic.ts)
      |                    turn passes back to player
      |                                    |
      | GET /game (polling)                |
@@ -41,7 +52,7 @@ Player (app UI)                     Assistant (conversation)
 ## Hidden Information
 
 The key Battleship mechanic is hidden information. Both the app UI and the
-assistant's skill receive sanitized views: hits and misses are visible, but
+assistant's script receive sanitized views: hits and misses are visible, but
 unhit ship cells are projected as `"empty"`. The assistant genuinely has to
 guess where ships are, making the game fair.
 
@@ -64,11 +75,12 @@ battleship/
   skills/
     battleship/
       SKILL.md              # Instructions for the assistant on how to play
+      scripts/
+        battleship.ts       # fire <coordinate> and status subcommands
   routes/
-    game.ts                 # Player-facing game API (GET state, POST fire/new)
-    assistant-fire.ts       # Assistant-facing fire endpoint
+    game.ts                 # Guardian-facing game API (GET state, POST fire/new)
   src/
-    game-logic.ts           # Core game logic (shared by routes)
+    game-logic.ts           # Core game logic (shared by routes + skill scripts)
     state-store.ts          # File-based game state persistence
   apps/
     battleship/
@@ -93,6 +105,7 @@ app_open(app_id="plugins~battleship~battleship")
 1. Open the Battleship app from your workspace Library
 2. Click "New Game" to start (ships are randomly placed)
 3. Click cells on the "Enemy Waters" grid to fire
-4. The assistant is automatically triggered to take its turn — it reads
-   the targeting grid, picks a coordinate strategically, and fires back
+4. The assistant is automatically triggered to take its turn — it runs
+   the battleship script to read the board, pick a coordinate
+   strategically, and fire back
 5. First to sink all 5 enemy ships wins!
