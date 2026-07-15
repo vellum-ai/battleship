@@ -35,7 +35,7 @@ export default {
     if (!game) {
       return {
         content:
-          "No active Battleship game. The player needs to start one by clicking New Game in the Battleship app.",
+          "No active Battleship game. The player needs to start one by clicking New Game in the Battleship app (app id: plugins~battleship~battleship).",
       };
     }
 

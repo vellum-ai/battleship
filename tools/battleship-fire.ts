@@ -53,7 +53,7 @@ export default {
     const game = loadGame();
     if (!game) {
       return {
-        content: "No active Battleship game. Ask the player to start one by clicking New Game in the app.",
+        content: "No active Battleship game. Ask the player to start one by clicking New Game in the Battleship app (app id: plugins~battleship~battleship).",
         isError: true,
       };
     }
