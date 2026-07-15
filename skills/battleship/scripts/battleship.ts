@@ -3,8 +3,10 @@
  * Battleship CLI script with subcommands for gameplay.
  *
  * Subcommands:
- *   fire <coordinate>    Fire at the player's fleet (e.g. "fire A5")
- *   status               Show current game state and targeting grid
+ *   fire <coordinate> [--game <id>]   Fire at the player's fleet
+ *   status [--game <id>]              Show current game state and targeting grid
+ *
+ * When --game is omitted, the most recent active game is used.
  *
  * Run with --help for usage.
  */
@@ -16,17 +18,34 @@ import {
   parseCoordinate,
   assistantViewOfPlayer,
 } from "../../../src/game-logic.js";
-import { loadGame, saveGame } from "../../../src/state-store.js";
+import { loadActiveGame, loadGame } from "../../../src/state-store.js";
 
 function printUsage(): void {
   console.log(`Usage: battleship.ts <subcommand> [options]
 
 Subcommands:
-  fire <coordinate>    Fire at the player's fleet (e.g. "fire A5")
-  status               Show current game state and your targeting grid
+  fire <coordinate> [--game <id>]   Fire at the player's fleet (e.g. "fire A5")
+  status [--game <id>]              Show current game state and your targeting grid
+
+Options:
+  --game <id>    Game ID to operate on. If omitted, uses the most recent game.
 
 Coordinates: A1 (top-left) through J10 (bottom-right).
 Letters A-J for rows, numbers 1-10 for columns.`);
+}
+
+function parseGameId(args: string[]): { gameId: string | undefined; rest: string[] } {
+  const rest: string[] = [];
+  let gameId: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--game" && i + 1 < args.length) {
+      gameId = args[i + 1];
+      i++;
+    } else {
+      rest.push(args[i]);
+    }
+  }
+  return { gameId, rest };
 }
 
 function formatGridAsText(grid: string[][]): string {
@@ -47,21 +66,29 @@ function formatGridAsText(grid: string[][]): string {
   return [header, ...rows].join("\n");
 }
 
-// ─── fire ────────────────────────────────────────────────────────────────────
+function resolveGame(gameId: string | undefined) {
+  if (gameId) return loadGame(gameId);
+  return loadActiveGame();
+}
+
+// --- fire ---
 
 async function fire(args: string[]): Promise<void> {
-  const coordinate = args[0];
+  const { gameId, rest } = parseGameId(args);
+  const coordinate = rest[0];
 
   if (!coordinate || coordinate === "--help" || coordinate === "-h") {
-    console.log("Usage: battleship.ts fire <coordinate>");
+    console.log("Usage: battleship.ts fire <coordinate> [--game <id>]");
     console.log('Example: battleship.ts fire A5');
     return;
   }
 
-  const game = loadGame();
+  const game = resolveGame(gameId);
   if (!game) {
     console.error(
-      "No active Battleship game. Ask the player to start one by clicking New Game in the Battleship app.",
+      gameId
+        ? `Game not found: ${gameId}`
+        : "No active Battleship game. Ask the player to start one from the app.",
     );
     process.exit(1);
   }
@@ -78,9 +105,7 @@ async function fire(args: string[]): Promise<void> {
 
   const parsed = parseCoordinate(coordinate);
   if (!parsed) {
-    console.error(
-      `Invalid coordinate: "${coordinate}". Use A1 through J10.`,
-    );
+    console.error(`Invalid coordinate: "${coordinate}". Use A1 through J10.`);
     process.exit(1);
   }
 
@@ -93,34 +118,32 @@ async function fire(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  // Record the shot
   game.assistantShots.push({
     row: parsed.row,
     col: parsed.col,
     result: result.result,
   });
 
-  // Check for win
   if (allShipsSunk(game.playerBoard)) {
     game.status = "assistant_won";
   } else {
     game.turn = "player";
   }
 
+  const { saveGame } = await import("../../../src/state-store.js");
   saveGame(game);
 
   const view = assistantViewOfPlayer(game);
 
-  // Format result message
   let message: string;
   if (game.status === "assistant_won") {
     message = `You fired at ${formatCoordinate(parsed.row, parsed.col)} and SUNK the last enemy ship! Victory!`;
   } else if (result.result === "sunk") {
     message = `You fired at ${formatCoordinate(parsed.row, parsed.col)} and SUNK the enemy's ${result.sunkShip}! ${view.remainingShips} ship(s) remaining.`;
   } else if (result.result === "hit") {
-    message = `You fired at ${formatCoordinate(parsed.row, parsed.col)} — HIT! ${view.remainingShips} ship(s) remaining.`;
+    message = `You fired at ${formatCoordinate(parsed.row, parsed.col)} - HIT! ${view.remainingShips} ship(s) remaining.`;
   } else {
-    message = `You fired at ${formatCoordinate(parsed.row, parsed.col)} — Miss. ${view.remainingShips} ship(s) remaining.`;
+    message = `You fired at ${formatCoordinate(parsed.row, parsed.col)} - Miss. ${view.remainingShips} ship(s) remaining.`;
   }
 
   const shotsList = view.shots
@@ -135,13 +158,16 @@ async function fire(args: string[]): Promise<void> {
   );
 }
 
-// ─── status ──────────────────────────────────────────────────────────────────
+// --- status ---
 
-async function status(): Promise<void> {
-  const game = loadGame();
+async function status(args: string[]): Promise<void> {
+  const { gameId } = parseGameId(args);
+  const game = resolveGame(gameId);
   if (!game) {
     console.log(
-      "No active Battleship game. The player needs to start one from the app.",
+      gameId
+        ? `Game not found: ${gameId}`
+        : "No active Battleship game. The player needs to start one from the app.",
     );
     return;
   }
@@ -162,7 +188,7 @@ async function status(): Promise<void> {
     .join("\n");
 
   console.log(
-    `Battleship game in progress.\n` +
+    `Battleship game in progress (id: ${game.gameId}).\n` +
       `Turn: ${game.turn === "assistant" ? "Your turn to fire" : "Player's turn"}\n` +
       `Enemy ships remaining: ${view.remainingShips}/5\n` +
       `Your shots fired: ${view.shots.length}\n\n` +
@@ -171,7 +197,7 @@ async function status(): Promise<void> {
   );
 }
 
-// ─── main ────────────────────────────────────────────────────────────────────
+// --- main ---
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -186,7 +212,7 @@ async function main(): Promise<void> {
       await fire(process.argv.slice(3));
       break;
     case "status":
-      await status();
+      await status(process.argv.slice(3));
       break;
     default:
       console.error(`Unknown subcommand: ${command}. Use --help for usage.`);
