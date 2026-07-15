@@ -24,6 +24,51 @@ export function App() {
     setMessages((prev) => [{ text, type }, ...prev].slice(0, 10));
   };
 
+  const rebuildMessages = (data: GameState) => {
+    const msgs: { text: string; type: string }[] = [];
+    const yourShots = data.enemyWaters?.yourShots || [];
+    const enemyShots = data.yourBoard?.enemyShots || [];
+
+    // Interleave shots chronologically. Player fires first (index 0),
+    // then assistant (index 0), then player (index 1), etc.
+    const maxLen = Math.max(yourShots.length, enemyShots.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (i < yourShots.length) {
+        const s = yourShots[i];
+        const coord = String.fromCharCode(65 + s.row) + (s.col + 1);
+        if (s.result === "sunk") {
+          msgs.push({ text: `You sank the enemy's ship at ${coord}!`, type: "sunk" });
+        } else if (s.result === "hit") {
+          msgs.push({ text: `Hit at ${coord}!`, type: "hit" });
+        } else {
+          msgs.push({ text: `Miss at ${coord}`, type: "miss" });
+        }
+      }
+      if (i < enemyShots.length) {
+        const s = enemyShots[i];
+        const coord = String.fromCharCode(65 + s.row) + (s.col + 1);
+        if (s.result === "sunk") {
+          msgs.push({ text: `Assistant sank your ship at ${coord}!`, type: "sunk" });
+        } else if (s.result === "hit") {
+          msgs.push({ text: `Assistant hit your ship at ${coord}`, type: "hit" });
+        } else {
+          msgs.push({ text: `Assistant missed at ${coord}`, type: "miss" });
+        }
+      }
+    }
+
+    if (data.status === "player_won") {
+      msgs.push({ text: "Victory! You sank all enemy ships!", type: "win" });
+    } else if (data.status === "assistant_won") {
+      msgs.push({ text: "The assistant sank your fleet!", type: "win" });
+    } else if (data.turn === "assistant") {
+      msgs.push({ text: "Assistant is taking its turn...", type: "info" });
+    }
+
+    // Newest first, capped at 10
+    setMessages(msgs.reverse().slice(0, 10));
+  };
+
   const loadGames = useCallback(async () => {
     try {
       const res = await vfetch(`${BASE}/games`);
@@ -43,6 +88,7 @@ export function App() {
         return;
       }
       setGame(data);
+      rebuildMessages(data);
     } catch {
       addMessage("Failed to load game state", "miss");
     }
@@ -59,6 +105,7 @@ export function App() {
       const res = await vfetch(`${BASE}/games/new`, { method: "POST" });
       const data = await res.json();
       setGame(data);
+      setMessages([]);
       setView("game");
       addMessage(data.message || "New game started!", "info");
       loadGames();
@@ -213,7 +260,7 @@ export function App() {
         <div class="ships-remaining">
           Your ships: <strong>{game.yourBoard.remainingShips}/5</strong> | Enemy ships: <strong>{game.enemyWaters.remainingShips}/5</strong>
         </div>
-        {game.turn === "assistant" && game.status === "playing" && game.conversationId && (
+        {game.conversationId && (
           <button
             class="btn btn-sm"
             onClick={() => viewConversation(game.conversationId!)}
