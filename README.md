@@ -8,9 +8,12 @@ This plugin demonstrates three plugin surfaces working together:
   board. The assistant discovers it natively as a plugin-bundled app (id:
   `plugins~battleship~battleship`) and serves it in the workspace panel.
 - **Routes** — File-based HTTP endpoints (`routes/`) serve the game API.
-  The app UI calls these to fire shots and check game state.
-- **Tools** — The assistant uses `battleship-fire` and `battleship-status`
-  tools to take its turns during conversation.
+  The app UI calls these to fire shots and check game state. After the
+  player fires, the game route triggers the assistant's turn automatically
+  via `runConversationTurn` from the plugin API.
+- **Skills** — The `skills/battleship/SKILL.md` instructs the assistant on
+  how to play: which routes to call, how to read the targeting grid, and
+  strategy for picking shots. The assistant uses `curl` via bash to fire.
 
 ## How It Works
 
@@ -25,9 +28,10 @@ Player (app UI)                     Assistant (conversation)
      |--------> routes/game.ts            |
      |<-------- hit/miss/sunk result      |
      |        turn passes to assistant    |
+     |        runConversationTurn()       |
      |                                    |
-     |                    battleship-fire tool
-     |                    fires at player's board
+     |                    skill activates, assistant reads SKILL.md
+     |                    curl POST /assistant-fire { coordinate }
      |                    turn passes back to player
      |                                    |
      | GET /game (polling)                |
@@ -37,7 +41,7 @@ Player (app UI)                     Assistant (conversation)
 ## Hidden Information
 
 The key Battleship mechanic is hidden information. Both the app UI and the
-assistant's tool receive sanitized views: hits and misses are visible, but
+assistant's skill receive sanitized views: hits and misses are visible, but
 unhit ship cells are projected as `"empty"`. The assistant genuinely has to
 guess where ships are, making the game fair.
 
@@ -55,16 +59,16 @@ Standard Battleship on a 10x10 grid:
 
 ```
 battleship/
-  package.json              # Plugin manifest (name, peerDependencies)
+  package.json              # Plugin manifest (peer dep @vellumai/plugin-api ^0.10.9)
   tsconfig.json
-  tools/
-    battleship-fire.ts      # Assistant fires at player's fleet
-    battleship-status.ts    # Assistant checks game state
+  skills/
+    battleship/
+      SKILL.md              # Instructions for the assistant on how to play
   routes/
     game.ts                 # Player-facing game API (GET state, POST fire/new)
     assistant-fire.ts       # Assistant-facing fire endpoint
   src/
-    game-logic.ts           # Core game logic (shared by routes + tools)
+    game-logic.ts           # Core game logic (shared by routes)
     state-store.ts          # File-based game state persistence
   apps/
     battleship/
@@ -89,6 +93,6 @@ app_open(app_id="plugins~battleship~battleship")
 1. Open the Battleship app from your workspace Library
 2. Click "New Game" to start (ships are randomly placed)
 3. Click cells on the "Enemy Waters" grid to fire
-4. The assistant takes its turn in the conversation, reasoning about
-   where your ships might be based on its hits and misses
+4. The assistant is automatically triggered to take its turn — it reads
+   the targeting grid, picks a coordinate strategically, and fires back
 5. First to sink all 5 enemy ships wins!
