@@ -19,6 +19,17 @@ export function App() {
   const [messages, setMessages] = useState<{ text: string; type: string }[]>([]);
   const [isFiring, setIsFiring] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [assistantName, setAssistantName] = useState("Assistant");
+
+  // Fetch the assistant's display name from the daemon identity endpoint
+  useEffect(() => {
+    vfetch("/v1/identity")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.name) setAssistantName(data.name);
+      })
+      .catch(() => {});
+  }, []);
 
   const addMessage = (text: string, type: string) => {
     setMessages((prev) => [{ text, type }, ...prev].slice(0, 10));
@@ -48,11 +59,11 @@ export function App() {
         const s = enemyShots[i];
         const coord = String.fromCharCode(65 + s.row) + (s.col + 1);
         if (s.result === "sunk") {
-          msgs.push({ text: `Assistant sank your ship at ${coord}!`, type: "sunk" });
+          msgs.push({ text: `${assistantName} sank your ship at ${coord}!`, type: "sunk" });
         } else if (s.result === "hit") {
-          msgs.push({ text: `Assistant hit your ship at ${coord}`, type: "hit" });
+          msgs.push({ text: `${assistantName} hit your ship at ${coord}`, type: "hit" });
         } else {
-          msgs.push({ text: `Assistant missed at ${coord}`, type: "miss" });
+          msgs.push({ text: `${assistantName} missed at ${coord}`, type: "miss" });
         }
       }
     }
@@ -60,9 +71,9 @@ export function App() {
     if (data.status === "player_won") {
       msgs.push({ text: "Victory! You sank all enemy ships!", type: "win" });
     } else if (data.status === "assistant_won") {
-      msgs.push({ text: "The assistant sank your fleet!", type: "win" });
+      msgs.push({ text: `${assistantName} sank your fleet!`, type: "win" });
     } else if (data.turn === "assistant") {
-      msgs.push({ text: "Assistant is taking its turn...", type: "info" });
+      msgs.push({ text: `${assistantName} is taking its turn...`, type: "info" });
     }
 
     // Newest first, capped at 10
@@ -154,7 +165,7 @@ export function App() {
         if (data.status === "player_won") {
           addMessage("Victory! You sank all enemy ships!", "win");
         } else if (data.turn === "assistant") {
-          addMessage("Assistant is taking its turn...", "info");
+          addMessage(`${assistantName} is taking its turn...`, "info");
           setTimeout(() => pollAssistantTurn(data.gameId), 3000);
         }
       }
@@ -171,7 +182,7 @@ export function App() {
 
     const poll = async () => {
       if (attempts >= maxAttempts) {
-        addMessage("Still waiting for the assistant. Click Refresh to check.", "info");
+        addMessage(`Still waiting for ${assistantName}. Click Refresh to check.`, "info");
         return;
       }
       attempts++;
@@ -186,12 +197,12 @@ export function App() {
             const latest = enemyShots[enemyShots.length - 1];
             const coord = String.fromCharCode(65 + latest.row) + (latest.col + 1);
             addMessage(
-              `Assistant fired at ${coord} - ${latest.result}${latest.result === "sunk" ? " your ship!" : ""}`,
+              `${assistantName} fired at ${coord} - ${latest.result}${latest.result === "sunk" ? " your ship!" : ""}`,
               latest.result === "hit" || latest.result === "sunk" ? "hit" : "miss",
             );
           }
           if (data.status === "assistant_won") {
-            addMessage("The assistant sank your fleet!", "win");
+            addMessage(`${assistantName} sank your fleet!`, "win");
           }
         } else {
           setTimeout(poll, 3000);
@@ -232,6 +243,7 @@ export function App() {
         onNewGame={startNewGame}
         onResume={resumeGame}
         loading={loading}
+        assistantName={assistantName}
       />
     );
   }
@@ -243,18 +255,18 @@ export function App() {
   return (
     <div>
       <h1>&#9875; Battleship</h1>
-      <div class="subtitle">You vs. Your Assistant</div>
+      <div class="subtitle">You vs. {assistantName}</div>
 
       <div class="status-bar">
         <div class="status-item" id="turn-indicator">
           {game.status === "player_won" ? (
             <><span class="dot over"></span> You Won!</>
           ) : game.status === "assistant_won" ? (
-            <><span class="dot over"></span> Assistant Won!</>
+            <><span class="dot over"></span> {assistantName} Won!</>
           ) : game.turn === "player" ? (
             <><span class="dot player"></span> Your Turn</>
           ) : (
-            <><span class="dot assistant"></span> Assistant Thinking...</>
+            <><span class="dot assistant"></span> {assistantName} Thinking...</>
           )}
         </div>
         <div class="ships-remaining">

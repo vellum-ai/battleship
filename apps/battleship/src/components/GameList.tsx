@@ -5,6 +5,7 @@ interface GameListProps {
   onNewGame: () => void;
   onResume: (gameId: string) => void;
   loading: boolean;
+  assistantName: string;
 }
 
 function formatDate(iso: string): string {
@@ -15,18 +16,18 @@ function formatDate(iso: string): string {
 
 function statusLabel(status: string): string {
   if (status === "player_won") return "You Won";
-  if (status === "assistant_won") return "Assistant Won";
+  if (status === "assistant_won") return `${assistantName} Won`;
   return "In Progress";
 }
 
-export function GameList({ games, onNewGame, onResume, loading }: GameListProps) {
+export function GameList({ games, onNewGame, onResume, loading, assistantName }: GameListProps) {
   const activeGames = games.filter((g) => g.status === "playing");
   const completedGames = games.filter((g) => g.status !== "playing");
 
   return (
     <div>
       <h1>&#9875; Battleship</h1>
-      <div class="subtitle">You vs. Your Assistant</div>
+      <div class="subtitle">You vs. {assistantName}</div>
 
       <div class="controls">
         <button class="btn primary" onClick={onNewGame} disabled={loading}>
@@ -48,7 +49,7 @@ export function GameList({ games, onNewGame, onResume, loading }: GameListProps)
               <div class="game-card" onClick={() => onResume(game.gameId)}>
                 <div class="game-meta">
                   <div>
-                    <strong>{game.turn === "player" ? "Your turn" : "Assistant's turn"}</strong>
+                    <strong>{game.turn === "player" ? "Your turn" : `${assistantName}'s turn`}</strong>
                     <div class="game-id">{game.gameId.slice(0, 8)}</div>
                   </div>
                   <div style="text-align:right">
