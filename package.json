@@ -1,0 +1,16 @@
+{
+  "name": "@vellumai/battleship",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Play Battleship against your assistant. Demonstrates plugin apps (init-hook app creation) and file-based routes.",
+  "license": "MIT",
+  "type": "module",
+  "keywords": ["battleship", "game", "demo", "apps", "routes"],
+  "peerDependencies": {
+    "@vellumai/plugin-api": "^0.10.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.2.4",
+    "typescript": "5.7.3"
+  }
+}
