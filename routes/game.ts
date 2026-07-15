@@ -20,6 +20,7 @@ import {
   type GameState,
 } from "../src/game-logic.js";
 import { loadGame, saveGame } from "../src/state-store.js";
+import { runConversationTurn } from "@vellumai/plugin-api";
 
 export const description = "Battleship game state and player moves";
 
@@ -159,7 +160,7 @@ async function fireShot(request: Request): Promise<Response> {
   saveGame(game);
 
   const view = projectPlayerView(game);
-  return Response.json({
+  const response = Response.json({
     ...view,
     lastShot: {
       coordinate: formatCoordinate(row, col),
@@ -168,6 +169,17 @@ async function fireShot(request: Request): Promise<Response> {
     },
     message: formatShotMessage(result.result, result.sunkShip),
   });
+
+  // If it's now the assistant's turn, trigger a conversation turn so the
+  // assistant takes its shot automatically. The skill instructions tell it
+  // how to fire via the assistant-fire route.
+  if (game.turn === "assistant" && game.status === "playing") {
+    triggerAssistantTurn().catch(() => {
+      // Non-fatal — the player can prompt the assistant manually
+    });
+  }
+
+  return response;
 }
 
 // ─── View projection ─────────────────────────────────────────────────────────
@@ -213,4 +225,20 @@ function formatShotMessage(result: string, sunkShip?: string): string {
     default:
       return result;
   }
+}
+
+/**
+ * Trigger the assistant to take its Battleship turn by posting a message
+ * into the active conversation. The assistant's skill instructions tell it
+ * to check the game state and fire via the assistant-fire route.
+ */
+async function triggerAssistantTurn(): Promise<void> {
+  await runConversationTurn({
+    content: [
+      {
+        type: "text",
+        text: "It's your turn in Battleship. Check the game state and fire your shot using the assistant-fire route. The Battleship skill has your instructions.",
+      },
+    ],
+  });
 }
