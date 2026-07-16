@@ -65,6 +65,8 @@ export interface GameState {
   createdAt: string;
   /** Conversation ID for assistant turns (set on first fire, reused after). */
   conversationId?: string;
+  /** Error message when the assistant turn fails (no coordinate returned). */
+  assistantError?: string;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────

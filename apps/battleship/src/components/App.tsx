@@ -21,9 +21,11 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [assistantName, setAssistantName] = useState("Assistant");
 
-  // Fetch the assistant's display name from the daemon identity endpoint
+  // Fetch the assistant's display name from the plugin's identity route.
+  // The daemon's /v1/identity endpoint requires settings.read scope and is
+  // blocked by the fetch proxy (only /v1/x/ paths are allowed).
   useEffect(() => {
-    vfetch("/v1/identity")
+    vfetch(`${BASE}/identity`)
       .then((res) => res.json())
       .then((data) => {
         if (data?.name) setAssistantName(data.name);
@@ -72,6 +74,8 @@ export function App() {
       msgs.push({ text: "Victory! You sank all enemy ships!", type: "win" });
     } else if (data.status === "assistant_won") {
       msgs.push({ text: `${assistantName} sank your fleet!`, type: "win" });
+    } else if (data.assistantError) {
+      msgs.push({ text: `${assistantName} error: ${data.assistantError}`, type: "miss" });
     } else if (data.turn === "assistant") {
       msgs.push({ text: `${assistantName} is taking its turn...`, type: "info" });
     }
@@ -181,16 +185,21 @@ export function App() {
     const maxAttempts = 30;
 
     const poll = async () => {
-      if (attempts >= maxAttempts) {
-        addMessage(`Still waiting for ${assistantName}. Click Refresh to check.`, "info");
-        return;
-      }
-      attempts++;
-      try {
-        const res = await vfetch(`${BASE}/game-state?gameId=${gameId}`);
-        const data = await res.json();
-        if (data.error) return;
-        if (data.turn === "player" || data.status !== "playing") {
+        if (attempts >= maxAttempts) {
+          addMessage(`Still waiting for ${assistantName}. Click Refresh to check.`, "info");
+          return;
+        }
+        attempts++;
+        try {
+          const res = await vfetch(`${BASE}/game-state?gameId=${gameId}`);
+          const data = await res.json();
+          if (data.error) return;
+          if (data.assistantError) {
+            setGame(data);
+            addMessage(`${assistantName} error: ${data.assistantError}`, "miss");
+            return;
+          }
+          if (data.turn === "player" || data.status !== "playing") {
           setGame(data);
           const enemyShots = data.yourBoard?.enemyShots;
           if (enemyShots && enemyShots.length > 0) {
@@ -227,13 +236,13 @@ export function App() {
   };
 
   const viewConversation = (conversationId: string) => {
-    vfetch(`${BASE}/open-conversation`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversationId }),
-    }).catch(() => {
-      addMessage("Failed to open conversation", "miss");
-    });
+    // Use the sandbox bridge's sendAction to tell the host web client
+    // to navigate to the conversation. The host handles the
+    // "open_conversation" action in handleAppViewerAction.
+    const vellum = (window as any).vellum;
+    if (vellum?.sendAction) {
+      vellum.sendAction("open_conversation", { conversationId });
+    }
   };
 
   if (view === "list") {
@@ -263,6 +272,8 @@ export function App() {
             <><span class="dot over"></span> You Won!</>
           ) : game.status === "assistant_won" ? (
             <><span class="dot over"></span> {assistantName} Won!</>
+          ) : game.assistantError ? (
+            <><span class="dot over"></span> {assistantName} Error</>
           ) : game.turn === "player" ? (
             <><span class="dot player"></span> Your Turn</>
           ) : (
@@ -272,7 +283,7 @@ export function App() {
         <div class="ships-remaining">
           Your ships: <strong>{game.yourBoard.remainingShips}/5</strong> | Enemy ships: <strong>{game.enemyWaters.remainingShips}/5</strong>
         </div>
-        {game.turn === "assistant" && game.status === "playing" && game.conversationId && (
+        {game.conversationId && (
           <button
             class="btn btn-sm"
             onClick={() => viewConversation(game.conversationId!)}

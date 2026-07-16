@@ -43,6 +43,7 @@ export async function GET(request: Request): Promise<Response> {
     turn: game.turn,
     createdAt: game.createdAt,
     conversationId: game.conversationId,
+    assistantError: game.assistantError,
     yourBoard: {
       grid: selfView.grid,
       shipGrid: selfView.shipGrid,

@@ -17,7 +17,10 @@ import {
   parseCoordinate,
   playerViewOfAssistant,
   playerViewOfSelf,
+  assistantViewOfPlayer,
   type GameState,
+  type Board,
+  type CellState,
 } from "../../src/game-logic.js";
 import { loadGame, saveGame } from "../../src/state-store.js";
 import { runConversationTurn } from "@vellumai/plugin-api";
@@ -118,6 +121,7 @@ function projectPlayerView(game: GameState) {
     turn: game.turn,
     createdAt: game.createdAt,
     conversationId: game.conversationId,
+    assistantError: game.assistantError,
     yourBoard: {
       grid: selfView.grid,
       shipGrid: selfView.shipGrid,
@@ -147,18 +151,23 @@ function formatShotMessage(result: string, sunkShip?: string): string {
 }
 
 async function triggerAssistantTurn(game: GameState): Promise<void> {
-  // Derive the plugin root from this module's URL so the assistant
-  // gets an exact `bun` command instead of having to discover it.
-  const moduleUrl = new URL(import.meta.url);
-  const pluginRoot = moduleUrl.pathname
-    .replace(/\/routes\/games\/fire\.ts$/, "");
+  // Build a text-based board representation so the assistant can see
+  // its previous shots without needing to run a script.
+  const view = assistantViewOfPlayer(game);
+  const boardText = formatBoardForAssistant(view.grid, view.shots);
+  const remaining = view.remainingShips;
 
   const promptText = [
     `It's your turn in Battleship (game ${game.gameId}).`,
     ``,
-    `1. Check the board: bun ${pluginRoot}/skills/battleship/scripts/battleship.ts status --game ${game.gameId}`,
-    `2. Pick a coordinate using your checkerboard strategy.`,
-    `3. Fire: bun ${pluginRoot}/skills/battleship/scripts/battleship.ts fire <coordinate> --game ${game.gameId}`,
+    `Your targeting grid (10x10, rows A-J, cols 1-10):`,
+    boardText,
+    ``,
+    `Enemy ships remaining: ${remaining}`,
+    `Your previous shots are marked H (hit) or M (miss) above.`,
+    ``,
+    `Pick a coordinate you haven't fired at yet and respond with ONLY the coordinate (e.g. "B7").`,
+    `Do not run any scripts or tools. Just reply with the coordinate.`,
   ].join("\n");
 
   const result = await runConversationTurn({
@@ -166,11 +175,95 @@ async function triggerAssistantTurn(game: GameState): Promise<void> {
       ? { conversationId: game.conversationId }
       : {}),
     content: [{ type: "text", text: promptText }],
-  });
+    // conversationType and source are new options added to
+    // RunConversationTurnOptions. They're not in the published type
+    // definitions yet (pending vellum-assistant PR), so we cast.
+    ...({ conversationType: "background", source: "plugin" } as Record<string, string>),
+  } as Parameters<typeof runConversationTurn>[0]);
 
   // Persist the conversation ID so future turns reuse the same conversation
   if (!game.conversationId && result.conversationId) {
     game.conversationId = result.conversationId;
-    saveGame(game);
   }
+
+  // Parse the assistant's response for a coordinate
+  const responseText = result.content
+    .filter((block) => block.type === "text")
+    .map((block) => (block as { text: string }).text)
+    .join(" ");
+
+  const coord = extractCoordinate(responseText);
+
+  if (!coord) {
+    game.assistantError = `Assistant did not return a valid coordinate. Response: "${responseText.slice(0, 200)}"`;
+    game.turn = "player";
+    saveGame(game);
+    return;
+  }
+
+  // Apply the assistant's shot directly
+  const shotResult = fireAtBoard(game.playerBoard, coord.row, coord.col);
+  if (shotResult.result === "already") {
+    // The assistant picked a coordinate it already fired at. Pick a random
+    // unfired cell as a fallback so the game doesn't stall.
+    const fallback = pickRandomUnfiredCell(game.playerBoard);
+    if (fallback) {
+      const fbResult = fireAtBoard(game.playerBoard, fallback.row, fallback.col);
+      game.assistantShots.push({ row: fallback.row, col: fallback.col, result: fbResult.result });
+      if (allShipsSunk(game.playerBoard)) {
+        game.status = "assistant_won";
+      }
+    }
+  } else {
+    game.assistantShots.push({ row: coord.row, col: coord.col, result: shotResult.result });
+    if (allShipsSunk(game.playerBoard)) {
+      game.status = "assistant_won";
+    }
+  }
+
+  game.turn = "player";
+  game.assistantError = undefined;
+  saveGame(game);
+}
+
+function formatBoardForAssistant(
+  grid: CellState[][],
+  shots: Array<{ row: number; col: number; result: string }>,
+): string {
+  // Build a display grid from the shot history
+  const display: string[][] = Array.from({ length: 10 }, () =>
+    Array.from({ length: 10 }, () => "."),
+  );
+  for (const shot of shots) {
+    display[shot.row][shot.col] = shot.result === "hit" || shot.result === "sunk" ? "H" : "M";
+  }
+  const header = "   " + Array.from({ length: 10 }, (_, i) => `${i + 1}`.padStart(2)).join(" ");
+  const rows = display.map((row, r) => {
+    const letter = String.fromCharCode(65 + r);
+    return ` ${letter} ${row.map((c) => ` ${c}`).join("")}`;
+  });
+  return [header, ...rows].join("\n");
+}
+
+function extractCoordinate(text: string): { row: number; col: number } | null {
+  // Look for a coordinate pattern like "B7" or "b7" in the text
+  const match = text.match(/\b([A-J])(\d{1,2})\b/i);
+  if (!match) return null;
+  const row = match[1].toUpperCase().charCodeAt(0) - "A".charCodeAt(0);
+  const col = parseInt(match[2], 10) - 1;
+  if (row < 0 || row >= 10 || col < 0 || col >= 10) return null;
+  return { row, col };
+}
+
+function pickRandomUnfiredCell(board: Board): { row: number; col: number } | null {
+  const cells: { row: number; col: number }[] = [];
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) {
+      if (board.grid[r][c] !== "hit" && board.grid[r][c] !== "miss") {
+        cells.push({ row: r, col: c });
+      }
+    }
+  }
+  if (cells.length === 0) return null;
+  return cells[Math.floor(Math.random() * cells.length)];
 }
