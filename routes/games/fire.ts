@@ -101,8 +101,11 @@ export async function POST(request: Request): Promise<Response> {
 
   // Trigger the assistant's turn automatically
   if (game.turn === "assistant" && game.status === "playing") {
-    triggerAssistantTurn(game).catch(() => {
-      // Non-fatal — the player can prompt the assistant manually
+    triggerAssistantTurn(game).catch((err) => {
+      // Non-fatal — record the error so the UI can surface it
+      game.assistantError = `Failed to trigger assistant turn: ${String(err).slice(0, 200)}`;
+      game.turn = "player";
+      saveGame(game);
     });
   }
 
@@ -118,6 +121,7 @@ function projectPlayerView(game: GameState) {
     turn: game.turn,
     createdAt: game.createdAt,
     conversationId: game.conversationId,
+    assistantError: game.assistantError,
     yourBoard: {
       grid: selfView.grid,
       shipGrid: selfView.shipGrid,
@@ -166,11 +170,39 @@ async function triggerAssistantTurn(game: GameState): Promise<void> {
       ? { conversationId: game.conversationId }
       : {}),
     content: [{ type: "text", text: promptText }],
-  });
+    // conversationType is a new option added to RunConversationTurnOptions.
+    // Not in the published type definitions yet, so we cast.
+    ...({ conversationType: "background" } as Record<string, string>),
+  } as Parameters<typeof runConversationTurn>[0]);
 
   // Persist the conversation ID so future turns reuse the same conversation
   if (!game.conversationId && result.conversationId) {
     game.conversationId = result.conversationId;
+  }
+
+  // Check if the assistant actually took a turn. If the response has no
+  // tool_use blocks and no meaningful text, it likely failed (e.g. blocked
+  // by permissions). Set an error so the UI can surface it.
+  const hasToolUse = result.content.some((block) => block.type === "tool_use");
+  const responseText = result.content
+    .filter((block) => block.type === "text")
+    .map((block) => (block as { text: string }).text)
+    .join(" ");
+
+  if (!hasToolUse && responseText.length < 10) {
+    game.assistantError = `Assistant did not take a turn. Response: "${responseText.slice(0, 200)}"`;
+    game.turn = "player";
     saveGame(game);
+    return;
+  }
+
+  // The assistant's shot is applied by the script itself (battleship.ts fire).
+  // We just need to reload the game state to pick up any changes the script
+  // made, and check if the game is over.
+  const updatedGame = loadGame(game.gameId);
+  if (updatedGame) {
+    // The script already saved the shot. Just clear any prior error.
+    updatedGame.assistantError = undefined;
+    saveGame(updatedGame);
   }
 }

@@ -7,7 +7,7 @@
   "type": "module",
   "keywords": ["battleship", "game", "demo", "apps", "routes"],
   "peerDependencies": {
-    "@vellumai/plugin-api": "^0.10.9"
+    "@vellumai/plugin-api": "^0.10.10"
   },
   "devDependencies": {
     "@types/bun": "1.2.4",

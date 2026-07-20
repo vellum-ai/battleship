@@ -23,6 +23,7 @@ export interface GameState {
   turn: "player" | "assistant";
   createdAt: string;
   conversationId?: string;
+  assistantError?: string;
   yourBoard: BoardView;
   enemyWaters: BoardView;
   yourShips: ShipInfo[];
